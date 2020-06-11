@@ -1,0 +1,88 @@
+Name: Danning Yu
+Email: danningyu@ucla.edu
+UID: 305087992
+
+Both the server and client use a segment of size 524 bytes, where the first 12 
+bytes are the header, comprised of a 4 byte sequence number, 4 byte ACK number, 
+2 byte payload length field, 1 byte for flags (SYN, ACK, FIN), and 1 byte of 
+padding. This is then followed by up to 512 bytes of data. The high level 
+design of my client is that it first reads in provided arguments from the 
+command line to determine the host and port to address segments to, as well as 
+the file to send, and using this information, it fills in the information in a 
+sockaddr_in struct, as well as opening an UDP socket. Then, it starts the TCP 
+connection processby sending a SYN segment using the sendto() function with the 
+information filled in the sockaddr_in struct, as UDP is a connectionless 
+protocol. Upon receiving a SYN-ACK for this segment, it then sends an ACK along 
+with the first payload of data, and it also sends up to 10 additional segments 
+if there is more data to send for a maximum window size of 10. I use selective 
+repeat to handle loss, so for each segment, it also starts a timer, and if an 
+ACK is not received for a segment within 0.5 seconds, it times out and resends 
+that segment. Upon receiving ACKs for a segment, if it's for the lowest segment 
+in the window, it sends another segment and moves the window forward as much as 
+possible until it encounters an unACKed segment. Otherwise, receiving an out of 
+order segment causues it to simply be marked as received in the current window. 
+Upon receiving the ACK for the last sent payload segment, the client sends a 
+FIN to the server and then awaits for the server to ACK this FIN and send back 
+its own FIN, which the client then ACKs and waits for 2 seconds before 
+terminating. Iflosses occur anytime during this connection teardown process, 
+the necessary segments are resent. On the server side, it opens a socket on the 
+specified port passed in and then waitsfor a SYN segment to arrive. Once a SYN 
+segment arrives, it then replies to it with a SYN-ACK and then waits for an ACK 
+segment, as well as becoming ready to maintain data. Then, as it receives data, 
+it ACKs this data, and if the data received is in order, it writes that data 
+to a file, as well as any other data that is now in order. The receiving window 
+is also moved up as much as possible. If the data is out of order, then using 
+the selective repeat protocol, it simply writes that data to a buffer and marks 
+that segment as received so that when all the segments before it arrives, it 
+will be written out to the file on disk with the received segments as well. If 
+the data received is a duplicate of what it has already gotten (due to the ACK 
+for that segment being lost), it simply discards that segment. It keeps waiting 
+for data to arrive until it gets a FIN segment from the client, in which case 
+it ACKs this segment, as well as sending back its own FIN. Upon receiving the 
+ACK for its FIN, the server then "closes" the connection by closing the file 
+on the disk and waiting for another SYN segment to arrive to mark the start 
+of a new connection request.
+
+(Sorry for the long paragraph! I wanted to capture all the main aspects of 
+the server and client.)
+
+The first problem I ran into was how to deal with the sendto() and recvfrom() 
+calls being blocking, which would cause my program to hang as it waited for 
+segments to arrive, and thus not be able to do other thingssuch as retransmit 
+due to timeout. I solved this issue by using the fcntl function as suggested by 
+the TA on Piazza, as well as using the poll() function on the socket file 
+descriptor so that I would only try to read from the socket if there was 
+data waiting to be read. This combination worked great and my program did not 
+get stuck after this.
+
+The next problem I ran into and the most difficult one was figuring out the 
+implementation needed for selective repeat. I knew that I needed my solution to 
+be fast and efficient, as I could not waste time copying or searching through 
+large chunks of data, or else it would be more likely that the retransmission 
+timer would time out due to my program being slow, thus unecessarily resending 
+segments. I solved this problem by maintaining a buffer that was only 10 
+segments large, as that is the maximum window size, and to accomodate for the 
+window moving up as segments are received or ACKed, I made the buffer circular 
+so that it wraps around once you reach the end of it. However, doing this meant 
+I had to carefully implement my code so that the logic for keeping track of 
+which segments can be written out to the file on the server side operates on a 
+circular buffer and does not try to access memory that is out of bounds. Thus, 
+all we need is a pointer to the current location in the buffer that moves in a 
+circular fashion, as well as an array of booleans that indicates which segments 
+in this buffer contain valid data. Then, if I receive an out of order segment, 
+I simply figure out how many segments ahead of the next expected segment it is, 
+and place it in that location in the buffer. Otherwise, if I receive an in 
+order segment, I read from the buffer until I run out of received segments to 
+read from. If I get a duplicate segment due to the ACK being lost, I can 
+immediately determine that I've gotten this segment before and thus discard 
+it. Thus, using a circular buffer meant that the extra memory overhead of 
+selective repeat was only around the size of 10 segments + some extra info, and 
+I never had to loop through my arrays more than necessary.
+
+Online Resources Used:
+Man pages for various system calls (open, read, clock_gettime, etc.)
+https://www.cs.dartmouth.edu/~campbell/cs60/socketprogramming.html
+https://www.geeksforgeeks.org/udp-server-client-implementation-c/
+https://www.cs.rutgers.edu/~pxk/417/notes/sockets/udp.html
+http://tcpipguide.com/free/t_TCPOperationalOverviewandtheTCPFiniteStateMachineF-2.htm
+http://telescript.denayer.wenk.be/~hcr/cn/idoceo/tcp_linkstates.html

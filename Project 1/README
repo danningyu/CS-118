@@ -1,0 +1,35 @@
+Name: Danning Yu
+Email: danningyu@ucla.edu
+UID: 305087992
+
+Server design:
+The server used in this project is a TCP server running on port 5000 that 
+accepts up to one connection at a time, parses the request header for the file 
+the client is asking for, and then returns a HTTP response, with the body 
+containing the requested file. Ifthe requested file is .html, .txt, .png, or 
+.jpg, the appropriate value is set for "Content-Type" so that the browser can 
+render it natively. If the file does not contain a file extension, it is sent 
+back as a binary file for the browser to download (content type is 
+application/octet stream). The server is not designed to handle nonexistent 
+files, files in subdirectories, and files containing characters other than 
+[A-Za-z.]. Once the response is sent, the client connection is closed so that 
+another request can be made. The server runs indefinitely, unless terminated 
+with a ^C or a system/library function call fails.
+
+Problems Solved:
+The first problem was learning how to do socket programming, which was mostly 
+solved with the help of TAs providing example code, reading the man pages, and 
+the online resources cited below that relate to socket programming.
+
+The second problem was figuring out the HTTP format and what headers needed to 
+be included. Lecture and lecture slides helped to start with solving this 
+problem, and then online resources helped to fill in the gaps. Once this 
+problem was solved, all that was left to do was some programming to fill 
+in the various fields of the HTTP response.
+
+Sources:
+Zhiyi Zhang's week 1 discussion slides
+https://www.cs.dartmouth.edu/~campbell/cs60/socketprogramming.html
+https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages
+https://www.tutorialspoint.com/http/http_responses.htm
+https://en.wikipedia.org/wiki/List_of_HTTP_header_fields
